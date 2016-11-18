@@ -1,0 +1,112 @@
+# -*- coding:utf-8 -*-
+import os, sys, datetime,io
+import MySQLdb
+import pandas
+import urllib
+import re
+
+
+def insertMysql(username, password, filename, localdir):
+    conn = MySQLdb.Connect(host='localhost', user=username, passwd=password, db='Financial', charset='utf8', use_unicode= True)
+    #conn.set_character_set('utf-8')
+    cursor = conn.cursor()
+    txtfile = localdir
+    #cursor.execute("""create database if not exists Financial""")
+    # conn.select_db('Financial')
+    # cursor.execute('SET CHARACTER SET utf8')
+    # cursor.execute('SET character_set_connection=utf8')
+    # cursor.execute('alter database name character set utf8')
+    read_file = open(txtfile, 'rU')
+    f = open(txtfile)
+    judgeholiday = f.readline().decode('gbk').strip()
+    if judgeholiday == '<script language="javascript">':
+        print filename + 'has no tradings!'
+    else:
+        create_str = 'create table if not exists ' + filename + """(tradetime varchar(20),
+        tradeprice varchar(20), pricechange varchar(20), turnover varchar(20), tradevolume varchar(20))"""
+        cursor.execute(create_str)
+        query = 'insert into ' + filename +' values(%s, %s, %s, %s, %s)'
+        count = len(read_file.readlines())-1
+        print count
+        line = f.readline().decode('gbk')
+        for count_i in range(1, count):
+            line = f.readline().decode('gbk')
+            p = re.compile(r'\s*')
+            value = p.split(line)
+            tradetime = value[0]
+            #print tradetime
+            tradeprice = value[1]
+            pricechange = value[2]
+            turnover = value[3]
+            tradevolume = value[4]
+            values = (tradetime, tradeprice, pricechange, turnover, tradevolume)
+            cursor.execute(query, values)
+    cursor.close()
+    conn.commit()
+    conn.close()
+
+
+def deleteMysql(username, password, filename, localdir):
+    conn = MySQLdb.Connect(host='localhost', user=username, passwd=password, db='Financial', charset='utf8',
+                           use_unicode=True)
+    cursor = conn.cursor()
+    #cursor.execute('use Financial')
+    deletetxt = localdir
+    if os.path.exists(deletetxt):
+        os.remove(deletetxt)
+    cursor.execute("""drop table if exists """ + filename)
+    cursor.close()
+    conn.commit()
+    conn.close()
+
+
+def spiderData(excelUrl, localDir):
+    spiderurl = excelUrl
+    spiderdir = localDir
+    urllib.urlretrieve(spiderurl, spiderdir)
+
+
+if __name__ == '__main__':
+    username = '***'
+    password = '*****'
+    str1 = 'http://market.finance.sina.com.cn/downxls.php?date='
+    str2 = "&symbol="
+    shareid = 'sh600900'
+    dirlog = 'txtfile/'
+    now = datetime.date.today()
+    print now
+    todayfile = os.path.exists(dirlog + shareid + '_' + str(now.year) + '_' + str(now.month) + '_'
+                               + str(now.day) + '.txt')
+    hisday = now - datetime.timedelta(days=366)
+    hisfile = os.path.exists(dirlog + shareid + '_' + str(hisday.year) + '_' + str(hisday.month) + '_'
+                             + str(hisday.day) + '.txt')
+    if todayfile:
+        print 'no need to update!'
+    elif hisfile:
+        print 'downloading today file:'
+        url1 = str1 + str(now) + str2 + shareid
+        insertfilename1 = shareid + '_' + str(now.year) + '_' + str(now.month) + '_' + str(now.day)
+        localDirinsert1 = dirlog + insertfilename1 + '.txt'
+        date = now - datetime.timedelta(days=366)
+        deletefilename = shareid + '_' + str(date.year) + '_' + str(date.month) + '_' + str(date.day)
+        localDirdelete = dirlog + deletefilename + '.txt'
+        spiderData(url1, localDirinsert1)
+        insertMysql(username, password, insertfilename1, localDirinsert1)
+        deleteMysql(username, password, deletefilename, localDirdelete)
+        ############
+    else:
+        print 'updating for the last year'
+        for dayrange in range(0, 366):
+            date = now - datetime.timedelta(days=dayrange)
+            print date
+            url2 = str1 + str(date) + str2 + shareid
+            print url2
+            insertfilename2 = shareid + '_' + str(date.year) + '_' + str(date.month) + '_' + str(date.day)
+            localDirinsert2 = dirlog+insertfilename2+'.txt'
+            spiderData(url2, localDirinsert2)
+            print 'haah'
+            insertMysql(username, password, insertfilename2, localDirinsert2)
+            ################
+
+
+            ################################
